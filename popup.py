@@ -3,8 +3,10 @@
 
 import argparse
 import tkinter as tk
+import winsound
 
-WIDTH, HEIGHT = 380, 120
+WIDTH, HEIGHT = 440, 170
+BG = "#1d4ed8"
 
 
 def main() -> None:
@@ -20,21 +22,22 @@ def main() -> None:
     root.overrideredirect(True)
     root.attributes("-topmost", True)
     root.attributes("-alpha", 0.96)
-    root.configure(bg="#1f2430")
+    root.configure(bg=BG)
+    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
 
     sw = root.winfo_screenwidth()
     root.geometry(f"{WIDTH}x{HEIGHT}+{sw - WIDTH - 24}+24")
 
-    tk.Label(root, text=args.title, bg="#1f2430", fg="#ffffff",
-             font=("Microsoft YaHei UI", 12, "bold"), anchor="w").pack(
+    tk.Label(root, text=args.title, bg=BG, fg="#ffffff",
+             font=("Microsoft YaHei UI", 16, "bold"), anchor="w").pack(
         fill="x", padx=16, pady=(14, 2))
 
-    tk.Label(root, text=args.text, bg="#1f2430", fg="#c9d1d9",
-             font=("Microsoft YaHei UI", 9), anchor="w", justify="left",
+    tk.Label(root, text=args.text, bg=BG, fg="#c9d1d9",
+             font=("Microsoft YaHei UI", 11), anchor="w", justify="left",
              wraplength=WIDTH - 32).pack(fill="x", padx=16)
 
-    countdown = tk.Label(root, text="", bg="#1f2430", fg="#7dd3fc",
-                         font=("Microsoft YaHei UI", 8), anchor="e")
+    countdown = tk.Label(root, text="", bg=BG, fg="#7dd3fc",
+                         font=("Microsoft YaHei UI", 9), anchor="e")
     countdown.pack(fill="x", padx=16, pady=(4, 8))
 
     if args.sticky:
