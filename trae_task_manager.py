@@ -29,7 +29,7 @@ CONFIG = os.path.join(HERE, "config.json")
 SIDEBAR_MAX_X = 460      # 任务列表列的最大 x
 LIST_MIN_Y = 430         # 任务区起始 y
 PIN_ICON_X = 515         # 行尾钉子按钮 x
-DOT_X, DOT_Y = 1645, 30  # 任务视图右上角「...」按钮
+MORE_ICON_X = 543        # 行尾「...」菜单按钮 x（悬停后出现）
 
 
 def load_dot():
@@ -87,13 +87,35 @@ def find_row(title_key: str):
 
 
 def menu_words():
-    return [(t, x, y, w, h) for t, x, y, w, h in ocr_words(screenshot())
-            if x > 1200 and y > 40]
+    # 右键菜单出现在任务行附近（左侧），不限定 x>1200
+    return [(t, x, y, w, h) for t, x, y, w, h in ocr_words(screenshot())]
 
 
 def click_menu_item(label: str) -> bool:
+    """按子串匹配点击菜单项（OCR 会把「删除任务」拆成 删/除/任/务）。"""
     for text, x, y, w, h in menu_words():
-        if text.strip() == label:
+        if label in text:
+            pyautogui.click(x + w // 2, y + h // 2)
+            time.sleep(1.2)
+            return True
+    return False
+
+
+def click_delete_in_menu(task_y: int) -> bool:
+    """在「...」菜单里找「删除任务」并点击（它在 task_y 下方约 300px）。"""
+    for text, x, y, w, h in menu_words():
+        if "删" in text and task_y + 250 <= y <= task_y + 360:
+            pyautogui.click(x + w // 2, y + h // 2)
+            time.sleep(1.2)
+            return True
+    return False
+
+
+def click_confirm_delete() -> bool:
+    """删除后的确认对话框里点「删除」（居中弹窗，避开右上角提示窗）。"""
+    for text, x, y, w, h in menu_words():
+        # 排除右上角常驻提示窗（x>1700 或 y<200）
+        if "删" in text and 600 <= x <= 1700 and y > 200:
             pyautogui.click(x + w // 2, y + h // 2)
             time.sleep(1.2)
             return True
@@ -162,25 +184,33 @@ def main() -> int:
         return 1
 
     # 删除流程（不可逆，执行前已由 --confirm 把关）
-    pyautogui.click(150, y)          # 先打开该任务
-    time.sleep(2.0)
+    # 入口：悬停任务行 -> 点「...」按钮 -> 菜单里点「删除任务」-> 确认
     popup = start_popup("正在删除任务，完成前请不要操作")
     try:
-        pyautogui.click(args.dot_x, args.dot_y)
+        pyautogui.moveTo(300, y)
+        time.sleep(0.9)
+        pyautogui.moveTo(MORE_ICON_X, y)
+        time.sleep(0.4)
+        pyautogui.click(MORE_ICON_X, y)
         time.sleep(1.2)
+
         if args.probe_menu:
-            print("[menu] 识别到的菜单项：")
+            print("[menu] 「...」菜单识别到的文字：")
             for text, x, yy, w, h in menu_words():
-                print(f"  ({x},{yy}) {text}")
+                if y <= yy <= y + 380:
+                    print(f"  ({x},{yy}) {text}")
             return 0
-        if not click_menu_item("删除"):
-            print("[x] 菜单里没找到「删除」，已中止（未删除任何东西）")
+
+        if not click_delete_in_menu(y):
+            print("[x] 菜单里没找到「删除任务」，已中止（未删除任何东西）")
             for text, x, yy, w, h in menu_words():
-                print(f"  候选: ({x},{yy}) {text}")
+                if y <= yy <= y + 380:
+                    print(f"  候选: ({x},{yy}) {text}")
             return 3
-        # 二次确认（如果有）
-        if click_menu_item("删除"):
-            print("[ok] 已点击二次确认「删除」")
+
+        # 确认对话框（如果有）
+        time.sleep(0.8)
+        click_confirm_delete()
         time.sleep(1.5)
     finally:
         stop_popup(popup)
