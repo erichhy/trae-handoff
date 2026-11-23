@@ -10,7 +10,7 @@
 
 ## 换任务动作
 1. 按 `handoff_template.md` 写 `.trae/handoff/<YYYYMMDD-HHmm>-<主题>.md`，≤80 行，不复制代码全文。
-2. 运行 `python trae_handoff.py --file .trae/handoff/<文件名>` 自动开新任务并发送「读 <文件> 继续」。
+2. 运行 `python trae_handoff.py --file .trae/handoff/<文件名>` 自动开新任务并发送「读 <文件> 继续」（会弹「请勿手动操作」提示窗，期间让用户别动键鼠）。
 3. 自动失败时，改为给用户一行可直接粘贴的开场语，让用户手动开任务。
 4. 旧对话保留在历史里，不删不改。
 

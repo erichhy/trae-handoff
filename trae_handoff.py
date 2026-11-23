@@ -23,6 +23,7 @@ import pyautogui
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OCR_PS1 = os.path.join(HERE, "ocr.ps1")
+POPUP_PY = os.path.join(HERE, "popup.py")
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -125,8 +126,26 @@ def prompt_visible(words, prompt: str) -> bool:
     return probe in joined
 
 
+def show_popup() -> None:
+    """右上角弹一个不阻塞的提示窗，提醒用户别手动操作。"""
+    if not os.path.exists(POPUP_PY):
+        return
+    try:
+        subprocess.Popen(
+            [sys.executable, POPUP_PY],
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        time.sleep(0.6)
+    except OSError as exc:
+        print(f"[!] 提示窗没弹出来: {exc}")
+
+
 # ---------- 主流程 ----------
-def run(prompt: str, dry_run: bool = False, no_send: bool = False) -> int:
+def run(prompt: str, dry_run: bool = False, no_send: bool = False,
+        no_popup: bool = False) -> int:
+    if not no_popup:
+        show_popup()
+
     shot = screenshot()
     words = ocr_words(shot)
 
@@ -194,11 +213,12 @@ def main() -> int:
     g.add_argument("--file", help="交接卡路径，自动拼成「读 <file> 继续」")
     ap.add_argument("--dry-run", action="store_true", help="只定位不点击")
     ap.add_argument("--no-send", action="store_true", help="建任务并粘贴，但不回车")
+    ap.add_argument("--no-popup", action="store_true", help="不弹「请勿手动操作」提示窗")
     args = ap.parse_args()
 
     prompt = args.prompt or f"读 {args.file} 继续"
     print(f"prompt: {prompt}")
-    return run(prompt, args.dry_run, args.no_send)
+    return run(prompt, args.dry_run, args.no_send, args.no_popup)
 
 
 if __name__ == "__main__":

@@ -41,7 +41,12 @@ python trae_handoff.py --file xxx.md --dry-run
 
 # 建任务并粘贴，但不回车（先人工看一眼）
 python trae_handoff.py --file xxx.md --no-send
+
+# 不弹「请勿手动操作」提示窗
+python trae_handoff.py --file xxx.md --no-popup
 ```
+
+执行时会在屏幕右上角弹一个 12 秒的置顶浮窗，提醒用户「请不要动鼠标和键盘」——因为这时脚本正在点击和粘贴，手动操作会抢焦点导致失败。
 
 ## 实现要点（踩过的坑）
 
@@ -50,6 +55,7 @@ python trae_handoff.py --file xxx.md --no-send
 - **不要随便按 Esc**：在新任务页按 Esc 可能让页面回到上一状态，导致后续点击落空。
 - **OCR 会吞标点**：校验时只比对字母数字，别拿带 `/` `-` 的整串去匹配。
 - **Electron 没有 UI 自动化树**：只能靠 OCR + 坐标，所以界面改版时定位会失效，需要重新校准。
+- **提示浮窗要放在右上角**：置顶窗口如果压住侧边栏或输入框，点击会被浮窗吃掉。`popup.py` 固定在右上角、无边框、自动关闭。
 
 ## 已知限制
 
