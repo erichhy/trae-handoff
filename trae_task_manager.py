@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
-"""trae_task_manager.py —— 按标题定位 Trae 任务，执行置顶 / 删除等菜单操作。
+"""trae_task_manager.py —— 按标题定位 Trae 任务，执行置顶 / 删除。
 
-做法：截图 + Windows OCR 找任务标题所在行 -> 右键 -> 再 OCR 找菜单项文字 -> 点击。
-菜单项文字由 --action 指定（例如 置顶 / 删除），所以界面文案变了只要改参数。
+置顶：悬停任务行，点行尾钉子按钮。
+删除：打开任务 -> 点右上角「...」-> 菜单里点「删除」-> 如有二次确认再点一次。
 
 用法：
     python trae_task_manager.py --list
-    python trae_task_manager.py --task "Install FlyClaw" --action 置顶 --dry-run
-    python trae_task_manager.py --task "Install FlyClaw" --action 删除 --confirm
+    python trae_task_manager.py --task "Install FlyClaw" --action 置顶
+    python trae_task_manager.py --task "signtalk" --action 删除 --confirm
+    python trae_task_manager.py --probe-menu          # 打开某任务后探测「...」菜单内容
 """
 
 import argparse
+import os
+import subprocess
 import sys
 import time
 
@@ -18,9 +21,28 @@ import pyautogui
 
 from trae_handoff import ocr_words, screenshot
 
-SIDEBAR_MAX_X = 460      # 任务列表所在列的最大 x
-LIST_MIN_Y = 430         # 任务区起始 y（避开顶部导航）
-PIN_ICON_X = 515         # 行尾「钉子」按钮的 x（悬停后出现）
+HERE = os.path.dirname(os.path.abspath(__file__))
+POPUP_PY = os.path.join(HERE, "popup.py")
+
+SIDEBAR_MAX_X = 460      # 任务列表列的最大 x
+LIST_MIN_Y = 430         # 任务区起始 y
+PIN_ICON_X = 515         # 行尾钉子按钮 x
+DOT_X, DOT_Y = 1645, 30  # 任务视图右上角「...」按钮
+
+
+def start_popup(text: str):
+    try:
+        return subprocess.Popen(
+            [sys.executable, POPUP_PY, "--sticky", "--title", "正在处理任务", "--text", text],
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError:
+        return None
+
+
+def stop_popup(proc) -> None:
+    if proc is not None and proc.poll() is None:
+        proc.terminate()
 
 
 def list_tasks():
@@ -28,42 +50,49 @@ def list_tasks():
     rows = {}
     for text, x, y, w, h in words:
         if x < SIDEBAR_MAX_X and y > LIST_MIN_Y and len(text.strip()) > 1:
-            key = y // 20
-            rows.setdefault(key, []).append((x, text, y))
+            rows.setdefault(y // 20, []).append((x, text, y))
     result = []
     for _, items in sorted(rows.items()):
         items.sort()
         title = " ".join(t for _, t, _ in items)
         if not any(ch.isalpha() or "\u4e00" <= ch <= "\u9fff" for ch in title):
-            continue  # 跳过纯时间戳行
-        y = min(y for _, _, y in items)
-        result.append((y, title))
+            continue
+        result.append((min(y for _, _, y in items), title))
     return result
 
 
 def find_row(title_key: str):
-    matches = [(y, text) for y, text in list_tasks() if title_key.lower() in text.lower()]
+    matches = [(y, t) for y, t in list_tasks() if title_key.lower() in t.lower()]
     if not matches:
         return None
-    # 优先完全相等，其次最短（避免 "signtalk" 匹配到 "Continue Signtalk Deployment"）
     matches.sort(key=lambda m: (m[1].strip().lower() != title_key.strip().lower(), len(m[1])))
     return matches[0][0]
 
 
-def find_text(label: str, words, min_y=None):
-    for text, x, y, w, h in words:
-        if text.strip() == label and (min_y is None or y >= min_y):
-            return x + w // 2, y + h // 2
-    return None
+def menu_words():
+    return [(t, x, y, w, h) for t, x, y, w, h in ocr_words(screenshot())
+            if x > 1200 and y > 40]
+
+
+def click_menu_item(label: str) -> bool:
+    for text, x, y, w, h in menu_words():
+        if text.strip() == label:
+            pyautogui.click(x + w // 2, y + h // 2)
+            time.sleep(1.2)
+            return True
+    return False
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Trae 任务置顶/删除")
-    ap.add_argument("--list", action="store_true", help="打印任务列表")
+    ap.add_argument("--list", action="store_true")
     ap.add_argument("--task", help="任务标题关键字")
-    ap.add_argument("--action", help="要点击的菜单项文字，如 置顶 / 删除")
-    ap.add_argument("--dry-run", action="store_true", help="只定位不点击")
-    ap.add_argument("--confirm", action="store_true", help="删除类操作必须带上")
+    ap.add_argument("--action", help="置顶 或 删除")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--confirm", action="store_true", help="删除必须带上")
+    ap.add_argument("--probe-menu", action="store_true", help="打开菜单并打印识别到的菜单项")
+    ap.add_argument("--dot-x", type=int, default=DOT_X)
+    ap.add_argument("--dot-y", type=int, default=DOT_Y)
     args = ap.parse_args()
 
     if args.list:
@@ -74,7 +103,7 @@ def main() -> int:
     if not args.task or not args.action:
         print("需要 --task 和 --action")
         return 1
-    if args.action == "删除" and not args.confirm:
+    if args.action == "删除" and not args.confirm and not args.probe_menu:
         print("删除操作不可恢复，请加 --confirm")
         return 1
 
@@ -83,42 +112,51 @@ def main() -> int:
         print(f"[x] 没找到标题包含「{args.task}」的任务")
         return 2
     print(f"[ok] 找到任务行 y={y}")
-
     if args.dry_run:
         return 0
 
-    if args.action in ("置顶", "pin"):
-        # 悬停让行尾出现钉子按钮，再点它
-        pyautogui.moveTo(300, y)
-        time.sleep(0.8)
-        pyautogui.moveTo(PIN_ICON_X, y)
-        time.sleep(0.4)
-        pyautogui.click(PIN_ICON_X, y)
-        time.sleep(1.5)
-        print(f"[ok] 已点钉子（{PIN_ICON_X},{y}），看左侧「置顶」数量是否 +1")
+    if args.action == "置顶":
+        popup = start_popup("正在置顶任务，请不要动鼠标键盘")
+        try:
+            pyautogui.moveTo(300, y)
+            time.sleep(0.8)
+            pyautogui.moveTo(PIN_ICON_X, y)
+            time.sleep(0.4)
+            pyautogui.click(PIN_ICON_X, y)
+            time.sleep(1.5)
+        finally:
+            stop_popup(popup)
+        print("[ok] 已点钉子，看左侧「置顶」数量是否变化")
         return 0
 
-    if args.action in ("删除", "delete"):
-        print("[x] Trae 任务行悬停只有钉子按钮，没有找到删除入口；删除请手动操作")
-        return 5
+    if args.action != "删除":
+        print("不支持的 action，只支持 置顶 / 删除")
+        return 1
 
-    pyautogui.click(150, y, button="right")
-    time.sleep(1.0)
-    shot = screenshot()
-    words = ocr_words(shot)
-    hit = find_text(args.action, words, min_y=y - 80)
-    if hit is None:
-        print(f"[x] 右键后没在菜单里找到「{args.action}」")
-        print("     当前识别到的文字：")
-        for text, x, yy, w, h in words:
-            if yy > y - 120 and yy < y + 400:
-                print(f"     ({x},{yy}) {text}")
-        pyautogui.press("escape")
-        return 3
-
-    pyautogui.click(*hit)
-    time.sleep(1.5)
-    print(f"[ok] 已点击「{args.action}」，请确认结果")
+    # 删除流程（不可逆，执行前已由 --confirm 把关）
+    pyautogui.click(150, y)          # 先打开该任务
+    time.sleep(2.0)
+    popup = start_popup("正在删除任务，完成前请不要操作")
+    try:
+        pyautogui.click(args.dot_x, args.dot_y)
+        time.sleep(1.2)
+        if args.probe_menu:
+            print("[menu] 识别到的菜单项：")
+            for text, x, yy, w, h in menu_words():
+                print(f"  ({x},{yy}) {text}")
+            return 0
+        if not click_menu_item("删除"):
+            print("[x] 菜单里没找到「删除」，已中止（未删除任何东西）")
+            for text, x, yy, w, h in menu_words():
+                print(f"  候选: ({x},{yy}) {text}")
+            return 3
+        # 二次确认（如果有）
+        if click_menu_item("删除"):
+            print("[ok] 已点击二次确认「删除」")
+        time.sleep(1.5)
+    finally:
+        stop_popup(popup)
+    print("[ok] 删除流程结束，请确认左侧列表是否已消失")
     return 0
 
 
