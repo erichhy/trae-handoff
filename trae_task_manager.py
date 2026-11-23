@@ -27,8 +27,8 @@ POPUP_PY = os.path.join(HERE, "popup.py")
 CONFIG = os.path.join(HERE, "config.json")
 
 SIDEBAR_MAX_X = 460      # 任务列表列的最大 x
-LIST_MIN_Y = 430         # 任务区起始 y
-PIN_ICON_X = 515         # 行尾钉子按钮 x
+LIST_MIN_Y = 280         # 任务区起始 y（置顶标题在 284 附近，之前是导航区）
+PIN_ICON_X = 506         # 行尾钉子按钮 x（像素实测中心）
 MORE_ICON_X = 543        # 行尾「...」菜单按钮 x（悬停后出现）
 
 
@@ -139,6 +139,20 @@ def click_confirm_delete() -> bool:
     return False
 
 
+def ensure_menu_space(title_key: str, y: int) -> int:
+    """菜单向下展开约需 320px；任务太靠下会被屏幕截断，先置顶把它移到顶部。"""
+    if y <= 1000:
+        return y
+    pyautogui.moveTo(300, y)
+    time.sleep(0.8)
+    pyautogui.moveTo(PIN_ICON_X, y)
+    time.sleep(0.4)
+    pyautogui.click(PIN_ICON_X, y)
+    time.sleep(1.6)
+    new_y = find_row(title_key)
+    return new_y if new_y is not None else y
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Trae 任务置顶/删除")
     ap.add_argument("--list", action="store_true")
@@ -204,6 +218,13 @@ def main() -> int:
     # 入口：悬停任务行 -> 点「...」按钮 -> 菜单里点「删除任务」-> 确认
     popup = start_popup("正在删除任务，完成前请不要操作")
     try:
+        # 任务在列表底部时菜单会被屏幕截断，先置顶移到顶部
+        y = ensure_menu_space(args.task, y)
+        if y is None:
+            print(f"[x] 定位失败「{args.task}」")
+            return 2
+        print(f"[ok] 任务已就位 y={y}")
+
         pyautogui.moveTo(300, y)
         time.sleep(0.9)
         pyautogui.moveTo(MORE_ICON_X, y)
