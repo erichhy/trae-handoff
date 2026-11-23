@@ -66,7 +66,14 @@ python trae_task_manager.py --list
 python trae_task_manager.py --task "Continue Signtalk Deployment" --action 置顶
 ```
 
-删除：Trae 任务行悬停只暴露钉子按钮，右键也不弹菜单，所以没有可靠的删除入口，需要手动清理。
+删除：先把鼠标停到任务视图右上角的「...」按钮上，运行一次校准，脚本会记住坐标：
+
+```bash
+python trae_task_manager.py --calibrate
+python trae_task_manager.py --task "signtalk" --action 删除 --confirm
+```
+
+执行删除时会弹常驻提示窗「正在删除任务，完成前请不要操作」，流程结束自动关闭；菜单里找不到「删除」会直接中止。
 
 ## 已知限制
 

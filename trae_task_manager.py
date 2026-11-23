@@ -12,6 +12,7 @@
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -23,11 +24,27 @@ from trae_handoff import ocr_words, screenshot
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 POPUP_PY = os.path.join(HERE, "popup.py")
+CONFIG = os.path.join(HERE, "config.json")
 
 SIDEBAR_MAX_X = 460      # 任务列表列的最大 x
 LIST_MIN_Y = 430         # 任务区起始 y
 PIN_ICON_X = 515         # 行尾钉子按钮 x
 DOT_X, DOT_Y = 1645, 30  # 任务视图右上角「...」按钮
+
+
+def load_dot():
+    """读取校准后的「...」坐标，没有就用默认值。"""
+    try:
+        with open(CONFIG, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return int(data["dot_x"]), int(data["dot_y"])
+    except (OSError, ValueError, KeyError):
+        return DOT_X, DOT_Y
+
+
+def save_dot(x: int, y: int) -> None:
+    with open(CONFIG, "w", encoding="utf-8") as fh:
+        json.dump({"dot_x": x, "dot_y": y}, fh, ensure_ascii=False, indent=2)
 
 
 def start_popup(text: str):
@@ -91,9 +108,20 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--confirm", action="store_true", help="删除必须带上")
     ap.add_argument("--probe-menu", action="store_true", help="打开菜单并打印识别到的菜单项")
-    ap.add_argument("--dot-x", type=int, default=DOT_X)
-    ap.add_argument("--dot-y", type=int, default=DOT_Y)
+    ap.add_argument("--calibrate", action="store_true", help="把当前鼠标位置记为「...」按钮坐标")
+    ap.add_argument("--dot-x", type=int, default=None)
+    ap.add_argument("--dot-y", type=int, default=None)
     args = ap.parse_args()
+
+    if args.calibrate:
+        x, y = pyautogui.position()
+        save_dot(x, y)
+        print(f"[ok] 已记录「...」按钮坐标: ({x}, {y})")
+        return 0
+
+    cfg_x, cfg_y = load_dot()
+    args.dot_x = args.dot_x if args.dot_x is not None else cfg_x
+    args.dot_y = args.dot_y if args.dot_y is not None else cfg_y
 
     if args.list:
         for y, title in list_tasks():
