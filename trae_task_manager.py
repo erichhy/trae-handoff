@@ -62,19 +62,36 @@ def stop_popup(proc) -> None:
         proc.terminate()
 
 
+def _is_meta_line(title: str) -> bool:
+    """判断是不是「置顶 6」「任务完成 · 19:03」这类附属行，不是任务标题。"""
+    compact = title.replace(" ", "")
+    if not compact:
+        return True
+    if compact.startswith("置顶") and compact[2:].isdigit():
+        return True
+    if "任务完成" in compact:
+        return True
+    return not any(ch.isalpha() or "\u4e00" <= ch <= "\u9fff" for ch in compact)
+
+
 def list_tasks():
     words = ocr_words(screenshot())
-    rows = {}
-    for text, x, y, w, h in words:
-        if x < SIDEBAR_MAX_X and y > LIST_MIN_Y and len(text.strip()) > 1:
-            rows.setdefault(y // 20, []).append((x, text, y))
+    items = [(y, x, text) for text, x, y, w, h in words
+             if x < SIDEBAR_MAX_X and y > LIST_MIN_Y and len(text.strip()) > 1]
+    items.sort()
+    rows = []
+    for y, x, text in items:
+        if rows and y - rows[-1][0] <= 14:
+            rows[-1][1].append((x, text))
+        else:
+            rows.append([y, [(x, text)]])
     result = []
-    for _, items in sorted(rows.items()):
-        items.sort()
-        title = " ".join(t for _, t, _ in items)
-        if not any(ch.isalpha() or "\u4e00" <= ch <= "\u9fff" for ch in title):
+    for y, parts in rows:
+        parts.sort()
+        title = " ".join(t for _, t in parts)
+        if _is_meta_line(title):
             continue
-        result.append((min(y for _, _, y in items), title))
+        result.append((y, title))
     return result
 
 
@@ -199,6 +216,7 @@ def main() -> int:
             for text, x, yy, w, h in menu_words():
                 if y <= yy <= y + 380:
                     print(f"  ({x},{yy}) {text}")
+            pyautogui.press("escape")
             return 0
 
         if not click_delete_in_menu(y):
