@@ -68,14 +68,12 @@ python trae_task_manager.py --list
 python trae_task_manager.py --task "Continue Signtalk Deployment" --action 置顶
 ```
 
-删除：先把鼠标停到任务视图右上角的「...」按钮上，运行一次校准，脚本会记住坐标：
+删除：入口在任务行悬停后的「...」菜单里（置顶 / 重命名 / 导出分享 / 复制会话 / 归档 / 删除任务）。
+但 **2026-11 实测发现自动点击不可靠**：菜单项需要在任务行下方展开约 320px，靠底部的任务会被屏幕截断；实际操作中还出现过无关任务从列表消失的情况。因此删除功能默认不建议自动执行，请手动操作。
 
 ```bash
-python trae_task_manager.py --calibrate
-python trae_task_manager.py --task "signtalk" --action 删除 --confirm
+python trae_task_manager.py --task "xxx" --action 删除 --probe-menu   # 只读菜单，安全
 ```
-
-执行删除时会弹常驻提示窗「正在删除任务，完成前请不要操作」，流程结束自动关闭；菜单里找不到「删除」会直接中止。
 
 ## 已知限制
 
