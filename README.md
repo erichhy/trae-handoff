@@ -1,5 +1,7 @@
 # Trae 自动换任务（Context Handoff）
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 给 Trae CN 的长对话做「到点就换班」：写一张交接卡，自动开一个新任务，把交接卡带进去，旧对话原样保留在历史里。
 
 ## 为什么需要
