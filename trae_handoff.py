@@ -61,7 +61,8 @@ def set_clipboard(text: str) -> None:
 
 # ---------- 截图 + OCR ----------
 def screenshot() -> str:
-    path = os.path.join(tempfile.gettempdir(), "trae_handoff_shot.png")
+    # 用唯一文件名，避免上一次的截图文件被占用/损坏导致保存失败
+    path = os.path.join(tempfile.gettempdir(), f"trae_handoff_{int(time.time() * 1000)}.png")
     pyautogui.screenshot().save(path)
     return path
 
@@ -218,7 +219,17 @@ def main() -> int:
 
     prompt = args.prompt or f"读 {args.file} 继续"
     print(f"prompt: {prompt}")
-    return run(prompt, args.dry_run, args.no_send, args.no_popup)
+    code = run(prompt, args.dry_run, args.no_send, args.no_popup)
+    if code == 0 and not args.dry_run:
+        # 新任务已发出，重置轮次计数器
+        guard = os.path.join(os.path.dirname(os.path.abspath(__file__)), "round_guard.py")
+        if os.path.exists(guard):
+            try:
+                subprocess.run([sys.executable, guard, "--reset", "--dir", os.getcwd()],
+                               capture_output=True, timeout=15)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+    return code
 
 
 if __name__ == "__main__":

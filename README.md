@@ -23,6 +23,18 @@ python trae_handoff.py --file .trae/handoff/20261123-1120-signtalk-deploy.md
 
 配套的助手规则见 [rules/user_rules.md](rules/user_rules.md)，交接卡样板见 [handoff_template.md](handoff_template.md)。
 
+## 轮次守卫（round_guard.py）
+
+助手靠记忆数轮次会漏（长对话里尤其明显），把计数落到文件：
+
+```bash
+python round_guard.py --bump --dir <项目根>   # 每条用户消息调用一次
+python round_guard.py --status --dir <项目根> # 看第几轮、最新交接卡
+python round_guard.py --reset --dir <项目根>  # 清零（trae_handoff.py 发完新任务会自动调）
+```
+
+状态存 `<项目>/.trae/handoff/rounds.json`，跨天自动归零；第 25 轮、第 30 轮各弹一次系统通知（`toast.ps1`），30 轮提示写交接卡换任务。
+
 ## 环境要求
 
 - Windows 10 1903+（用到系统自带 OCR，中文语言包）
