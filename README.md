@@ -57,6 +57,17 @@ python trae_handoff.py --file xxx.md --no-popup
 - **Electron 没有 UI 自动化树**：只能靠 OCR + 坐标，所以界面改版时定位会失效，需要重新校准。
 - **提示浮窗要放在右上角**：置顶窗口如果压住侧边栏或输入框，点击会被浮窗吃掉。`popup.py` 固定在右上角、无边框、自动关闭。
 
+## 任务置顶
+
+`trae_task_manager.py` 按标题找到任务行，悬停后点行尾的钉子按钮置顶：
+
+```bash
+python trae_task_manager.py --list
+python trae_task_manager.py --task "Continue Signtalk Deployment" --action 置顶
+```
+
+删除：Trae 任务行悬停只暴露钉子按钮，右键也不弹菜单，所以没有可靠的删除入口，需要手动清理。
+
 ## 已知限制
 
 - 只针对 Trae CN 的中文界面；换语言或大改版需要改定位逻辑。

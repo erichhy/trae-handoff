@@ -20,6 +20,7 @@ from trae_handoff import ocr_words, screenshot
 
 SIDEBAR_MAX_X = 460      # 任务列表所在列的最大 x
 LIST_MIN_Y = 430         # 任务区起始 y（避开顶部导航）
+PIN_ICON_X = 515         # 行尾「钉子」按钮的 x（悬停后出现）
 
 
 def list_tasks():
@@ -41,10 +42,12 @@ def list_tasks():
 
 
 def find_row(title_key: str):
-    for y, text in list_tasks():
-        if title_key.lower() in text.lower():
-            return y
-    return None
+    matches = [(y, text) for y, text in list_tasks() if title_key.lower() in text.lower()]
+    if not matches:
+        return None
+    # 优先完全相等，其次最短（避免 "signtalk" 匹配到 "Continue Signtalk Deployment"）
+    matches.sort(key=lambda m: (m[1].strip().lower() != title_key.strip().lower(), len(m[1])))
+    return matches[0][0]
 
 
 def find_text(label: str, words, min_y=None):
@@ -83,6 +86,21 @@ def main() -> int:
 
     if args.dry_run:
         return 0
+
+    if args.action in ("置顶", "pin"):
+        # 悬停让行尾出现钉子按钮，再点它
+        pyautogui.moveTo(300, y)
+        time.sleep(0.8)
+        pyautogui.moveTo(PIN_ICON_X, y)
+        time.sleep(0.4)
+        pyautogui.click(PIN_ICON_X, y)
+        time.sleep(1.5)
+        print(f"[ok] 已点钉子（{PIN_ICON_X},{y}），看左侧「置顶」数量是否 +1")
+        return 0
+
+    if args.action in ("删除", "delete"):
+        print("[x] Trae 任务行悬停只有钉子按钮，没有找到删除入口；删除请手动操作")
+        return 5
 
     pyautogui.click(150, y, button="right")
     time.sleep(1.0)
