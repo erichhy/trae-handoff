@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""对话轮次守卫：用文件计数器保证 25/30 轮提醒不会漏。
+"""对话轮次与日期跨度守卫：用文件计数器保证提醒不会漏。
 
 用法:
     python round_guard.py --bump     # 每收到一条用户消息调用一次，计数 +1
-    python round_guard.py --status   # 看当前第几轮
-    python round_guard.py --reset    # 新会话开始时清零
+    python round_guard.py --status   # 看当前第几轮、这段对话跨了几天
+    python round_guard.py --reset    # 新会话开始时清零（同时重置起始日期）
 
-状态写在 <项目>/.trae/handoff/rounds.json，跨天自动归零。
---dir 指向项目根目录，默认当前目录。
-提醒方式：25 轮弹系统通知，30 轮再弹一次并提示换任务。
+状态写在 <项目>/.trae/handoff/rounds.json。
+  - 轮次按自然日计：跨天归零，避免把几天的旧计数算进来
+  - 起始日期跨天保留：这是"这段对话聊了多久"的唯一可靠记录
+  - 3 天提醒收尾，7 天提示立即换任务
 """
 
 import argparse
@@ -22,6 +23,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOAST = os.path.join(HERE, "toast.ps1")
 WARN_25 = 25
 WARN_30 = 30
+SPAN_WARN = 3      # 跨满 3 天提醒收尾
+SPAN_FORCE = 7     # 跨满 7 天提示立即换任务
 
 
 def state_path(project_dir: str) -> str:
@@ -54,17 +57,37 @@ def toast(title: str, text: str) -> None:
 
 def load(project_dir: str) -> dict:
     today = dt.date.today().isoformat()
-    state = {"date": today, "round": 0, "warned25": False, "warned30": False}
+    state = {"start_date": today, "date": today, "round": 0,
+             "warned25": False, "warned30": False,
+             "warned_span3": False, "warned_span7": False}
     path = state_path(project_dir)
-    if os.path.exists(path):
-        try:
-            with open(path, encoding="utf-8") as f:
-                saved = json.load(f)
-            if saved.get("date") == today:
-                state.update(saved)
-        except (OSError, json.JSONDecodeError):
-            pass
+    if not os.path.exists(path):
+        return state
+    try:
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return state
+    # 起始日期与跨天提醒标记跨天保留：它们描述的是整段对话，不是今天
+    if saved.get("start_date") or saved.get("date"):
+        state["start_date"] = saved.get("start_date") or saved["date"]
+        state["warned_span3"] = bool(saved.get("warned_span3"))
+        state["warned_span7"] = bool(saved.get("warned_span7"))
+    # 轮次只在同一天内累加
+    if saved.get("date") == today:
+        for k in ("round", "warned25", "warned30"):
+            if k in saved:
+                state[k] = saved[k]
     return state
+
+
+def span_days(state: dict) -> int:
+    """这段对话从起始日期到今天跨了几天（起始当天为 0）。"""
+    try:
+        start = dt.date.fromisoformat(state["start_date"])
+    except (TypeError, ValueError):
+        return 0
+    return (dt.date.today() - start).days
 
 
 def save(project_dir: str, state: dict) -> None:
@@ -87,15 +110,18 @@ def main() -> int:
     state = load(project_dir)
 
     if args.reset:
-        state["round"] = 0
-        state["warned25"] = False
-        state["warned30"] = False
+        today = dt.date.today().isoformat()
+        state.update(start_date=today, date=today, round=0,
+                     warned25=False, warned30=False,
+                     warned_span3=False, warned_span7=False)
         save(project_dir, state)
-        print(f"轮次已清零（{state['date']}）")
+        print(f"轮次已清零（{today}，起始日期同步重置）")
         return 0
 
+    span = span_days(state)
     if args.status:
         print(f"第 {state['round']} 轮（{state['date']}）")
+        print(f"对话第 {span} 天（起始 {state['start_date']}）")
         card = latest_card(project_dir)
         if card:
             print("最新任务卡：" + os.path.relpath(card, project_dir))
@@ -103,7 +129,7 @@ def main() -> int:
 
     state["round"] += 1
     n = state["round"]
-    lines = [f"第 {n} 轮"]
+    lines = [f"第 {n} 轮", f"对话第 {span} 天（起始 {state['start_date']}）"]
 
     if n >= WARN_30 and not state["warned30"]:
         state["warned30"] = True
@@ -113,6 +139,17 @@ def main() -> int:
         state["warned25"] = True
         lines.append(f"已 {WARN_25} 轮：到 30 轮就该换任务，提前收尾")
         toast("对话已到 25 轮", "还有 5 轮，准备写交接卡")
+
+    if span >= SPAN_FORCE and not state["warned_span7"]:
+        state["warned_span7"] = True
+        lines.append(f"⚠ 已跨 {span} 天：收尾后立即换任务，别再长下去")
+        toast(f"对话已跨 {span} 天",
+              "立即写交接卡换任务（先做完手头关键操作）")
+    elif span >= SPAN_WARN and not state["warned_span3"]:
+        state["warned_span3"] = True
+        lines.append(f"⚠ 已跨 {span} 天：建议写交接卡换任务，回复「切」立即执行")
+        toast(f"对话已跨 {span} 天",
+              "建议写交接卡换任务，回复「切」立即执行")
 
     save(project_dir, state)
 
